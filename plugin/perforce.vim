@@ -79,27 +79,27 @@ augroup vimp4python
 
     " Keyboard shortcuts - default <Leader> is \
     " (listed in order of shortcuts)
-    map <silent> <Leader>pa :echo <SID>P4Add()<CR>
-    map <silent> <Leader>pb :echo <SID>P4Branches()<CR>
-    map <silent> <Leader>pc :echo <SID>P4Clients()<CR>
-    map <silent> <Leader>pd :echo <SID>P4Delete()<CR>
-    map <silent> <Leader>pe :echo <SID>P4Edit()<CR>
-    map <silent> <Leader>pf :echo <SID>P4Fstat()<CR> 
-    map <silent> <Leader>pg :echo <SID>P4Sync()<CR>
-    map <silent> <Leader>ph :echo <SID>P4Filelog()<CR>
-    map <silent> <Leader>pi :echo <SID>P4Info()<CR>
-    map <silent> <Leader>pk :echo <SID>P4Diff()<CR>
-    map <silent> <Leader>pl :echo <SID>P4Lock()<CR>
-    map <silent> <Leader>pn :echo <SID>P4Annotate()<CR>
-    map <silent> <Leader>po :echo <SID>P4Opened()<CR>
-    map <silent> <Leader>pp :echo <SID>PluginHelp()<CR>
-    map <silent> <Leader>pr :echo <SID>P4Revert()<CR>
-    map <silent> <Leader>ps :echo <SID>P4Submit()<CR>
-    map <silent> <Leader>pt :echo <SID>P4Tag()<CR>
-    map <silent> <Leader>pu :echo <SID>P4Unlock()<CR>
-    map <silent> <Leader>pw :echo <SID>P4Where()<CR>
-    map <silent> <Leader>px :echo <SID>P4Fix()<CR>
-    map <silent> <Leader>pz :echo <SID>P4Run()<CR>
+    map <silent> <Leader>a :echo <SID>P4Add()<CR>
+    map <silent> <Leader>b :echo <SID>P4Branches()<CR>
+    map <silent> <Leader>c :echo <SID>P4Clients()<CR>
+    map <silent> <Leader>d :echo <SID>P4Delete()<CR>
+    map <silent> <Leader>e :echo <SID>P4Edit()<CR>
+    map <silent> <Leader>f :echo <SID>P4Fstat()<CR> 
+    map <silent> <Leader>g :echo <SID>P4Sync()<CR>
+    map <silent> <Leader>h :echo <SID>P4Filelog()<CR>
+    map <silent> <Leader>i :echo <SID>P4Info()<CR>
+    map <silent> <Leader>k :echo <SID>P4Diff()<CR>
+    map <silent> <Leader>l :echo <SID>P4Lock()<CR>
+    map <silent> <Leader>n :echo <SID>P4Annotate()<CR>
+    map <silent> <Leader>o :echo <SID>P4Opened()<CR>
+    map <silent> <Leader>p :echo <SID>PluginHelp()<CR>
+    map <silent> <Leader>r :echo <SID>P4Revert()<CR>
+    map <silent> <Leader>s :echo <SID>P4Submit()<CR>
+    map <silent> <Leader>t :echo <SID>P4Tag()<CR>
+    map <silent> <Leader>u :echo <SID>P4Unlock()<CR>
+    map <silent> <Leader>w :echo <SID>P4Where()<CR>
+    map <silent> <Leader>x :echo <SID>P4Fix()<CR>
+    map <silent> <Leader>z :echo <SID>P4Run()<CR>
 
     " menus
     " (listed in order of shortcuts)
@@ -1228,4 +1228,1097 @@ try:
     p4.connect()
     p4.tagged = True
     out = p4.run("group", "-o", vim.eval("group")) 
-    if not (
+    if not (isinstance(out, types.NoneType)):
+        m = out[0]
+        print m['Group']
+        print "{0:<15}{1}".format("MaxResults",m['MaxResults'])
+        print "{0:<15}{1}".format("MaxScanRows",m['MaxScanRows'])
+        print "{0:<15}{1}".format("MaxLockTime",m['MaxLockTime'])
+        print "{0:<15}{1}".format("Timeout",m['Timeout'])
+        if 'Subgroups' in m:
+            print "{0:<15}".format("Subgroups")
+            for s in m['Subgroups']:
+                print "{0:<5}{1}".format("",s)
+        if 'Users' in m:
+            print "{0:<15}".format("Users")
+            for s in m['Users']:
+                print "{0:<5}{1}".format("",s)
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" list groups for current user
+"
+function s:P4Groups()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    info = p4.run("info")
+    username = info[0]['userName']
+    out = p4.run("groups", username)
+    if not (isinstance(out, types.NoneType)):
+        print "{0:<25}{1:<15}{2:<15}{3:<15}{4:<15}".format('group','maxResults','maxScanRows','maxLockTime','timeout')
+        for m in out:
+            print "{0:<25}{1:<15}{2:<15}{3:<15}{4:<15}".format(m['group'],m['maxResults'],m['maxScanRows'],m['maxLockTime'],m['timeout'])
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" grep
+"
+function s:P4Grep()
+    let pattern = inputdialog( "Grep for", "")
+    let path = inputdialog( "Grep where", "")
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("grep", "-e", vim.eval("pattern"), vim.eval("path"))
+    if not (isinstance(out, types.NoneType)):
+        print "{0:<40}{1:<10}{2}".format('depotFile','rev','matchedLine')
+        for m in out:
+            print "{0:<40}{1:<10}{2}".format(m['depotFile'],m['rev'],m['matchedLine'].replace("\t","    "))
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" integrated
+"
+function s:P4Integrated()
+python << EOF
+import vim, P4, types
+from datetime import datetime
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("integrated", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+    	for s in out:
+            print s
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" display job info
+"
+function s:P4Job()
+    let job = inputdialog( "Enter job ID", "")
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("job", "-o", vim.eval("job")) 
+    if not (isinstance(out, types.NoneType)):
+        m = out[0]
+        print m['Job'] + " (" + m['Status'] + ")"
+        print "    " + m['Description']
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" display job list
+"
+function s:P4Jobs()
+    let jobview = inputdialog( "Enter job query", "")
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("jobs", "-e", vim.eval("jobview")) 
+    if not (isinstance(out, types.NoneType)):
+        for m in out:
+            print m['Job'] + " (" + m['Status'] + ")    " + m['Description']
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" job spec
+"
+function s:P4Jobspec()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("jobspec", "-o")
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s.replace("\t","    ")
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" display label info
+"
+function s:P4Label()
+    let label = inputdialog( "Enter label name", "")
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("label", "-o", vim.eval("label")) 
+    if not (isinstance(out, types.NoneType)):
+        m = out[0]
+        print m['Label'] + " (" + m['Options'] + ")"
+        if 'Revision' in m:
+            print "Revision: %s" % m['Revision']
+        print "  " + m['Description']
+        for s in m['View']:
+            print "    " + s
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" display label list
+"
+function s:P4Labels()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("labels", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        print "{0:<25}{1:<15}description".format('label','options')
+        for m in out:
+            print "{0:<25}{1:<15}{2}".format(m['label'],m['Options'],m['Description'])
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" plugin help
+"
+function s:PluginHelp()
+python << EOF
+print("P4Python.vim: Vim plugin for Perforce, based on P4Python API")
+print("Uses Perforce environment from current working directory")
+print("Perforce and P4Python are copyright Perforce Software, Inc.")
+print("Available commands:")
+print("{0:<4}{1:<15}{2}".format("","PluginHelp","See this message"))
+print("{0:<4}{1:<15}{2}".format("","P4Add","Add current file to Perforce"))
+print("{0:<4}{1:<15}{2}".format("","P4Annotate","Revision annotations for current file"))
+print("{0:<4}{1:<15}{2}".format("","P4Attribute","Set a file attribute"))
+print("{0:<4}{1:<15}{2}".format("","P4Attributes","List file attributes"))
+print("{0:<4}{1:<15}{2}".format("","P4Branch","See information about one branch spec"))
+print("{0:<4}{1:<15}{2}".format("","P4Branches","List branches owned by current user"))
+print("{0:<4}{1:<15}{2}".format("","P4Change","See information about one changelist"))
+print("{0:<4}{1:<15}{2}".format("","P4Changes","See information about all changelists affecting current file"))
+print("{0:<4}{1:<15}{2}".format("","P4Client","Current workspace information"))
+print("{0:<4}{1:<15}{2}".format("","P4Clients","List workspaces owned by current user"))
+print("{0:<4}{1:<15}{2}".format("","P4Counters","List system counters"))
+print("{0:<4}{1:<15}{2}".format("","P4Dbschema","Database schema information"))
+print("{0:<4}{1:<15}{2}".format("","P4Dbstat","Database statistics"))
+print("{0:<4}{1:<15}{2}".format("","P4Delete","Delete current file"))
+print("{0:<4}{1:<15}{2}".format("","P4Depots","List all depots"))
+print("{0:<4}{1:<15}{2}".format("","P4Diff","Diff current file against have revision"))
+print("{0:<4}{1:<15}{2}".format("","P4Diff2","Diff two revisions of current file"))
+print("{0:<4}{1:<15}{2}".format("","P4Edit","Open current file for edit"))
+print("{0:<4}{1:<15}{2}".format("","P4Filelog","See history of current file"))
+print("{0:<4}{1:<15}{2}".format("","P4Fix","Fix a job"))
+print("{0:<4}{1:<15}{2}".format("","P4Fixes","List fix records for a job"))
+print("{0:<4}{1:<15}{2}".format("","P4Fstat","Get current file information"))
+print("{0:<4}{1:<15}{2}".format("","P4Grep","Search in Perforce files"))
+print("{0:<4}{1:<15}{2}".format("","P4Group","Information on one group"))
+print("{0:<4}{1:<15}{2}".format("","P4Groups","List groups for current user"))
+print("{0:<4}{1:<15}{2}".format("","P4Help","Perforce help for a command"))
+print("{0:<4}{1:<15}{2}".format("","P4Info","Perforce connection information"))
+print("{0:<4}{1:<15}{2}".format("","P4Integrated","Integration records for current file"))
+print("{0:<4}{1:<15}{2}".format("","P4Job","Information on one job"))
+print("{0:<4}{1:<15}{2}".format("","P4Jobs","List jobs that match a job query"))
+print("{0:<4}{1:<15}{2}".format("","P4Jobspec","Perforce jobspec information"))
+print("{0:<4}{1:<15}{2}".format("","P4Label","Information on one label"))
+print("{0:<4}{1:<15}{2}".format("","P4Labels","List labels for current file"))
+print("{0:<4}{1:<15}{2}".format("","P4License","Perforce license information"))
+print("{0:<4}{1:<15}{2}".format("","P4Lock","Lock current file"))
+print("{0:<4}{1:<15}{2}".format("","P4Lockstat","Database lock information"))
+print("{0:<4}{1:<15}{2}".format("","P4Logstat","Log information"))
+print("{0:<4}{1:<15}{2}".format("","P4Logtail","Log tail"))
+print("{0:<4}{1:<15}{2}".format("","P4Monitor","Process monitor"))
+print("{0:<4}{1:<15}{2}".format("","P4Obliterate","Obliterate preview"))
+print("{0:<4}{1:<15}{2}".format("","P4Opened","See files open in current workspace"))
+print("{0:<4}{1:<15}{2}".format("","P4Print","Print a revision of the current file"))
+print("{0:<4}{1:<15}{2}".format("","P4Protect","Protections table"))
+print("{0:<4}{1:<15}{2}".format("","P4Protects","User protections"))
+print("{0:<4}{1:<15}{2}".format("","P4ReopenChange","Reopen to different changelist"))
+print("{0:<4}{1:<15}{2}".format("","P4ReopenType","Reopen to different file type"))
+print("{0:<4}{1:<15}{2}".format("","P4Resolve","Resolve automatically"))
+print("{0:<4}{1:<15}{2}".format("","P4Resolved","Resolve status"))
+print("{0:<4}{1:<15}{2}".format("","P4Revert","Revert current file"))
+print("{0:<4}{1:<15}{2}".format("","P4RevGraph","Show revision graph with integration points"))
+print("{0:<4}{1:<15}{2}".format("","P4Run","Run any command"))
+print("{0:<4}{1:<15}{2}".format("","P4Set","Environment information"))
+print("{0:<4}{1:<15}{2}".format("","P4Shelve","Shelve current file in changelist"))
+print("{0:<4}{1:<15}{2}".format("","P4ShelveRemove","Remove current file from shelved changelist"))
+print("{0:<4}{1:<15}{2}".format("","P4Sizes","File size for each revision of current file"))
+print("{0:<4}{1:<15}{2}".format("","P4Submit","Submit current file"))
+print("{0:<4}{1:<15}{2}".format("","P4Sync","Get head revision of current file"))
+print("{0:<4}{1:<15}{2}".format("","P4Tag","Label current file"))
+print("{0:<4}{1:<15}{2}".format("","P4Tickets","Tickets for current user"))
+print("{0:<4}{1:<15}{2}".format("","P4Triggers","Trigger table"))
+print("{0:<4}{1:<15}{2}".format("","P4Tunables","Tunables"))
+print("{0:<4}{1:<15}{2}".format("","P4Typemap","Typemap table"))
+print("{0:<4}{1:<15}{2}".format("","P4Unlock","Unlock current file"))
+print("{0:<4}{1:<15}{2}".format("","P4Unshelve","Unshelve current file from changelist"))
+print("{0:<4}{1:<15}{2}".format("","P4User","User profile"))
+print("{0:<4}{1:<15}{2}".format("","P4Users","List all users"))
+print("{0:<4}{1:<15}{2}".format("","P4Verify","Verify current file"))
+print("{0:<4}{1:<15}{2}".format("","P4Where","See depot and local path for current file"))
+EOF
+endfunction
+
+"
+" environment info
+"
+function s:P4Set()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    print p4.identify()
+    env_vars = ["P4AUDIT","P4CHARSET","P4COMMANDCHARSET","P4CLIENT","P4CONFIG","P4DEBUG","P4DESCRIPTION","P4DIFF","P4DIFFUNICODE","P4EDITOR","P4HOST","P4JOURNAL","P4LANGUAGE","P4LOG","P4MERGE","P4MERGEUNICODE","P4NAME","P4PAGER","P4PASSWD","P4PORT","P4TARGET","P4TICKETS","P4USER","P4ZEROCONF","PWD","TMP","TEMP"]
+    for e in env_vars:
+        print("{0:<4}{1:<20}{2}".format("",e,p4.env(e)))
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" sizes
+"
+function s:P4Sizes()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("sizes", "-a", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        print "{0:<5}{1}".format('rev','fileSize (KB)') 
+        for m in out:
+            fsize = "%.1f" % (float(m['fileSize']) / 1024.0)
+            print "{0:<5}{1}".format(m['rev'],fsize) 
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" tag a single file
+"
+function s:P4Tag()
+    let label = inputdialog( "Enter label name", "")
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("tag", "-l", vim.eval("label"), vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" license info
+"
+function s:P4License()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("license", "-o")
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s.replace("\t","    ")
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" db lock info
+"
+function s:P4Lockstat()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("lockstat")
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s.replace("\t","    ")
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" log info
+"
+function s:P4Logstat()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("logstat")
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s.replace("\t","    ")
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" log tail
+"
+function s:P4Logtail()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("logtail")
+    if not (isinstance(out, types.NoneType)):
+        print out[0]['file']
+        print out[0]['data'].replace("\t","    ")
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" monitor
+"
+function s:P4Monitor()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("monitor", "show")
+    if not (isinstance(out, types.NoneType)):
+        print("{0:<10}{1:<10}{2:<20}{3:<15}{4}".format('id','status','user','time','command'))
+        for m in out:
+            print("{0:<10}{1:<10}{2:<20}{3:<15}{4}".format(m['id'],m['status'],m['user'],m['time'],m['command']))
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" obliterate
+"
+function s:P4Obliterate()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("obliterate", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        print("PREVIEW MODE")
+        for m in out:
+            if 'clientRecDeleted' in m:
+                print("{0:<5}{1}".format(m['clientRecDeleted'], "client records deleted"))
+            if 'labelRecDeleted' in m:
+                print("{0:<5}{1}".format(m['labelRecDeleted'], "label records deleted"))
+            if 'integrationRecDeleted' in m:
+                print("{0:<5}{1}".format(m['integrationRecDeleted'], "integration records deleted"))
+            if 'workingRecDeleted' in m:
+                print("{0:<5}{1}".format(m['workingRecDeleted'], "working records deleted"))
+            if 'revisionRecDeleted' in m:
+                print("{0:<5}{1}".format(m['revisionRecDeleted'], "revision records deleted"))
+            if 'purgeFile' in m:
+                print('Purged ' + m['purgeFile'] + '#' +  m['purgeRev'])
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" display protetions data
+"
+function s:P4Protects()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("protects")
+    if not (isinstance(out, types.NoneType)):
+        print("{0:<15}{1:<20}{2:<20}{3}".format('Permission','User or group','Host','Path'))
+        for m in out:
+            who = ''
+            if 'user' in m:
+                who = m['user']
+            if 'group' in m:
+                who = m['group']
+            print("{0:<15}{1:<20}{2:<20}{3}".format(m['perm'],who,m['host'],m['depotFile']))
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" protections table
+"
+function s:P4Protect()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("protect", "-o")
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s.replace("\t","    ")
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" reopen to changelist
+"
+function s:P4ReopenChange()
+    let change = inputdialog( "Enter changelist number", "")
+python << EOF
+import vim, P4, types
+from datetime import datetime
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("reopen", "-c", vim.eval("change"), vim.current.buffer.name) 
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s.replace("\t","    ")
+    p4.disconnect()
+    vim.command("edit")
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" reopen file type
+"
+function s:P4ReopenType()
+    let type = inputdialog( "Enter file type", "")
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("reopen", "-t", vim.eval("type"), vim.current.buffer.name) 
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s.replace("\t","    ")
+    p4.disconnect()
+    vim.command("edit")
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" resolve
+"
+function s:P4Resolve()
+    let accept = inputdialog( "Enter accept resolve option", "")
+python << EOF
+import vim, P4, types
+accept = vim.eval("accept")
+if accept == '-am' or accept == '-af' or accept == '-as' or accept == '-at' or accept == '-ay':
+    p4 = P4.P4()
+    p4.prog = "VIM Integration"
+    P4Exception = P4.P4Exception
+    try:
+        p4.connect()
+        p4.tagged = False
+        out = p4.run("resolve", accept, vim.current.buffer.name) 
+        if not (isinstance(out, types.NoneType)):
+            for s in out:
+                print s.replace("\t","    ")
+        p4.disconnect()
+        vim.command("edit")
+
+    except P4Exception:
+        for e in p4.errors:
+            print e
+        for w in p4.warnings:
+            print w
+else:
+    print("Error: you must select one of -am/-af/-as/-at/-ay")
+EOF
+endfunction
+
+"
+" resolve status
+"
+function s:P4Resolved()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("resolved", vim.current.buffer.name) 
+    if not (isinstance(out, types.NoneType)):
+        m = out[0]
+        print("{0:<40}{1:<15}{2}{3},{4}".format(m['toFile'],m['how'],m['fromFile'],m['startFromRev'],m['endFromRev']))
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" trigger table
+"
+function s:P4Triggers()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("triggers", "-o")
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s.replace("\t","    ")
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" typemap table
+"
+function s:P4Typemap()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("typemap", "-o")
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s.replace("\t","    ")
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" tickets
+"
+function s:P4Tickets()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("tickets")
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s.replace("\t","    ")
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" tunables
+"
+function s:P4Tunables()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("tunables", "-a")
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s.replace("\t","    ")
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" set attribute
+"
+function s:P4Attribute()
+    let attrib = inputdialog( "Attribute name", "")
+    let value = inputdialog( "Enter value", "")
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("attribute", "-n", vim.eval("attrib"), "-v", vim.eval("value"), vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s.replace("\t","    ")
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" attribute list
+"
+function s:P4Attributes()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("fstat", "-Oa", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        m = out[0]
+        print("{0:<30}{1}".format("Name","Value"))
+        for key in iter(m):
+            if key.find("attr-") == 0:
+                print("{0:<30}{1}".format(key[5:],m[key]))
+            if key.find("openattr-") == 0:
+                print("{0:<30}{1}".format(key[9:],m[key]))
+        
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" run any command
+"
+function s:P4Run()
+    let cmd = inputdialog( "Enter complete command to run, without the leading 'p4'", "")
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run(vim.eval("cmd").split())
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" shelve
+"
+function s:P4Shelve()
+    let change = inputdialog( "Enter changelist number", "")
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("reopen", "-c", vim.eval("change"), vim.current.buffer.name)
+    out = p4.run("shelve", "-c", vim.eval("change"), "-f", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s
+    p4.disconnect()
+    vim.command("edit")
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" remove from shelf
+"
+function s:P4ShelveRemove()
+    let change = inputdialog( "Enter changelist number", "")
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("shelve", "-d", "-c", vim.eval("change"), "-f", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" unshelve
+"
+function s:P4Unshelve()
+    let change = inputdialog( "Enter changelist number", "")
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("unshelve", "-s", vim.eval("change"), vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s
+    p4.disconnect()
+    vim.command("edit")
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" ASCII rev graph
+"
+function s:P4RevGraph()
+python << EOF
+import vim, P4, types
+from datetime import datetime
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("integrated", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        graph = ''
+    	for m in out:
+            # current file always listed as 'to file'
+            how = m['how']
+            if how.find("into") != -1 or how.find("ignored by") != -1:
+                toFile = m['fromFile']
+                fromFile = m['toFile']
+                startToRev = m['startFromRev']
+                endToRev = m['endFromRev']
+                startFromRev = m['startToRev']
+                endFromRev = m['endToRev']
+            else:
+                toFile = m['toFile']
+                fromFile = m['fromFile']
+                startToRev = m['startToRev']
+                endToRev = m['endToRev']
+                startFromRev = m['startFromRev']
+                endFromRev = m['endFromRev']
+            change = m['change']
+            graph = graph + fromFile + endFromRev + '@' + toFile + endToRev + '@change ' + change + ' ' + how + "|"
+        if graph == '':
+            graph = 'NONE'
+        vim.command("let b:graph = \"%s\"" % graph)
+    else:
+        print("No integration records")
+        vim.command("let b:graph = \"NONE\"")
+    p4.disconnect()
+
+except P4Exception:
+    vim.command("let b:graph = \"NONE\"")
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+perl << EOF
+use Graph::Easy; 
+my @gstr = VIM::Eval('b:graph');
+if($gstr[1] ne '' and $gstr[1] ne 'NONE') {
+    my @parts = split(/\|/, $gstr[1]);
+    my $graph = Graph::Easy->new();
+    foreach my $pair (@parts) {
+        my @p = split(/@/,$pair);
+        $graph->add_node($p[0]);
+        $graph->add_node($p[1]);
+        $graph->add_edge($p[0],$p[1],$p[2]);
+    }
+    VIM::Msg($graph->as_ascii());
+}
+EOF
+endfunction
