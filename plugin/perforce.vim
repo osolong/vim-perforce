@@ -1,749 +1,1231 @@
-" Authors: Tom Slee (tslee@ianywhere.com); Suresh Srinivasan; Terrance Cohen
-" Last Modified: Mon May 28 2007
-" Version: 0.5
-"
-" ---------------------------------------------------------------------------
-" perforce.vim - An interface to the perforce command line.  This script
-" provides a shortcut to the most frequently used operations such as edit,
-" sync, and revert. There is no attempt to make this lits comprehensive. If you
-" want to carry out all your p4 tasks from within vim, see Hari Krishna Dara's
-" perforce integration.
-"
-" Perforce is a source control system, also known as 'the Fast Software
-" Configuration Management System'.  See http://www.perforce.com
-" ---------------------------------------------------------------------------
+" VIM integration via P4Python
+" Depends on P4Python API
+" P4RevGraph requires perl and Graph::Easy module
+" Uses the connection environment from the current working directory.
+" Oriented towards commands that can be run on a single file.
+" Get help by typing :help vimp4python.
 
+"
+" Copyright (c) Perforce Software, Inc., 1997-2010. All rights reserved
+"
+" Redistribution and use in source and binary forms, with or without
+" modification, are permitted provided that the following conditions are met:
+" 
+" 1.  Redistributions of source code must retain the above copyright
+"     notice, this list of conditions and the following disclaimer.
+" 
+" 2.  Redistributions in binary form must reproduce the above copyright
+"     notice, this list of conditions and the following disclaimer in the
+"     documentation and/or other materials provided with the distribution.
+" 
+" THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+" 'AS IS' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+" LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+" FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL PERFORCE
+" SOFTWARE, INC. BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+" SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+" LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+" DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+" ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR
+" TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+" THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+" DAMAGE.
+" 
+" User contributed content on the Perforce Public Depot is not supported by Perforce,
+" although it may be supported by its author. This applies to all contributions 
+" even those submitted by Perforce employees.
+"
+
+"
 " Standard code to avoid loading twice and to allow not loading
-if exists("loaded_perforce")
-   finish
+" Also detects if python is available
+"
+if exists("loaded_vimp4python")
+    finish
 endif
-let loaded_perforce=1
+let loaded_vimp4python=1
+if (has('python') || has('python/dyn'))
+    let loaded_vimp4python=1
+else
+    finish
+endif
 
+"
+" check for P4Python API
+"
+python << EOF
+try:
+    import vim, P4
+    p4 = P4.P4()
+    vim.command("let b:hasp4 = \"1\"")
+except:
+    vim.command("let b:hasp4 = \"0\"")
+EOF
+if b:hasp4 == "0"
+    finish
+endif
+
+" set this to 0 to disable ruler calls
+let P4SetRuler = 1
+
+"
 " define the mappings that provide the user interface to this plug-in
-augroup perforce
+"
+augroup vimp4python
 
-  " events
-  autocmd FileChangedRO * nested call <SID>P4OpenFileForEditWithPrompt()
-  autocmd BufRead * call <SID>P4InitialBufferVariables()
-  autocmd BufRead * call <SID>P4GetFileStatus()
+    " events
+    autocmd BufRead * call <SID>P4InitialBufferVariables()
+    autocmd BufRead * call <SID>P4FstatVars()
 
-  " Keyboard shortcuts - default <Leader> is \
-  map <silent> <Leader><Leader> :echo <SID>P4GetInfo()<CR>
-"  map <silent> <Leader>a :echo <SID>P4AnnotateFile()<CR>
-  map <silent> <Leader>e :call <SID>P4OpenFileForEdit()<CR>
-  map <silent> <Leader>r :call <SID>P4RevertFile()<CR>
-  map <silent> <Leader>i :echo <SID>P4GetFileStatus()<CR>
-"  map <silent> <Leader>s :echo <SID>P4GetFileStatus()<CR> " For backward compatibility
-"  map <silent> <Leader>y :echo <SID>P4SyncFile()<CR>
-"  map <silent> <Leader>d :echo <SID>P4DiffFile()<CR>
-"  map <silent> <Leader>u :echo <SID>P4UDiffFile()<CR>
-"  map <silent> <Leader>z :echo <SID>P4VDiffFile()<CR>
-  map <silent> <Leader>v :echo <SID>P4VersionsFile()<CR>
-"  map <silent> <Leader>p :echo <SID>P4PrintFile()<CR>
-  map <silent> <Leader>h :echo <SID>P4Help()<CR>
-  map <silent> <Leader>L :call <SID>P4Login()<CR>
-"  map <silent> <Leader>x :call <SID>P4OpenFileForDeletion()<CR>
-  map <silent> <Leader>C :call <SID>P4CreateChangelist()<CR>
-"  map <silent> <Leader>D :echo <SID>P4DiffFiles()<CR>
-"  map <silent> <Leader>U :echo <SID>P4UDiffFiles()<CR>
-  map <silent> <Leader>G :echo <SID>P4GetChangelists(1)<CR>
-  map <silent> <Leader>I :echo <SID>P4GetChangelistInfo()<CR>
-"  map <silent> <Leader>F :echo <SID>P4GetFiles()<CR>
-  map <silent> <Leader>X :call <SID>P4DeleteChangelist()<CR>
-  map <silent> <Leader>S :call <SID>P4SubmitChangelist()<CR>
+    " Keyboard shortcuts - default <Leader> is \
+    " (listed in order of shortcuts)
+    map <silent> <Leader>pa :echo <SID>P4Add()<CR>
+    map <silent> <Leader>pb :echo <SID>P4Branches()<CR>
+    map <silent> <Leader>pc :echo <SID>P4Clients()<CR>
+    map <silent> <Leader>pd :echo <SID>P4Delete()<CR>
+    map <silent> <Leader>pe :echo <SID>P4Edit()<CR>
+    map <silent> <Leader>pf :echo <SID>P4Fstat()<CR> 
+    map <silent> <Leader>pg :echo <SID>P4Sync()<CR>
+    map <silent> <Leader>ph :echo <SID>P4Filelog()<CR>
+    map <silent> <Leader>pi :echo <SID>P4Info()<CR>
+    map <silent> <Leader>pk :echo <SID>P4Diff()<CR>
+    map <silent> <Leader>pl :echo <SID>P4Lock()<CR>
+    map <silent> <Leader>pn :echo <SID>P4Annotate()<CR>
+    map <silent> <Leader>po :echo <SID>P4Opened()<CR>
+    map <silent> <Leader>pp :echo <SID>PluginHelp()<CR>
+    map <silent> <Leader>pr :echo <SID>P4Revert()<CR>
+    map <silent> <Leader>ps :echo <SID>P4Submit()<CR>
+    map <silent> <Leader>pt :echo <SID>P4Tag()<CR>
+    map <silent> <Leader>pu :echo <SID>P4Unlock()<CR>
+    map <silent> <Leader>pw :echo <SID>P4Where()<CR>
+    map <silent> <Leader>px :echo <SID>P4Fix()<CR>
+    map <silent> <Leader>pz :echo <SID>P4Run()<CR>
 
-  " user-defined commands must start with a capital letter and should not include digits
-  command -nargs=1 Perforce :call <SID>P4ShellCommandAndEditCurrentBuffer( <f-args> )
-  command -nargs=0 PerforceLaunch :call <SID>P4LaunchFromP4()
-
-  " menus
-  menu <silent> &Perforce.&Login :call <SID>P4Login()<CR>
-  menu <silent> &Perforce.Info :echo <SID>P4GetInfo()<CR>
-  menu <silent> Perforce.-Sep1- :
-  menu <silent> &Perforce.Show\ file\ &annotated :echo <SID>P4AnnotateFile()<CR>
-  menu <silent> &Perforce.List\ file\ &versions :echo <SID>P4VersionsFile()<CR>
-  menu <silent> &Perforce.&Diff :echo <SID>P4DiffFile()<CR>
-  menu <silent> &Perforce.&Unified diff :echo <SID>P4UDiffFile()<CR>
-  menu <silent> &Perforce.&Edit :call <SID>P4OpenFileForEdit()<CR>
-  menu <silent> &Perforce.Mark\ file\ for\ deletion :call <SID>P4OpenFileForDeletion()<CR>
-  menu <silent> &Perforce.&Revert :call <SID>P4RevertFile()<CR>
-  menu <silent> &Perforce.S&ync :echo <SID>P4SyncFile()<CR>
-  menu <silent> &Perforce.&Status :echo <SID>P4GetFileStatus()<CR>
-  menu <silent> Perforce.-Sep2- :
-  menu <silent> &Perforce.Submit\ changelist :call <SID>P4SubmitChangelist()<CR>
-  menu <silent> Perforce.-Sep3- :
-  menu <silent> &Perforce.&Create\ changelist :call <SID>P4CreateChangelist()<CR>
-  menu <silent> &Perforce.Diff\ all\ files :echo <SID>P4DiffFiles()<CR>
-  menu <silent> &Perforce.Unified diff\ all\ files :echo <SID>P4UDiffFiles()<CR>
-  menu <silent> &Perforce.Delete\ changelist :call <SID>P4DeleteChangelist()<CR>
-  menu <silent> &Perforce.List\ change&lists :echo <SID>P4GetChangelists(1)<CR>
-  menu <silent> &Perforce.Get\ changelist\ info :echo <SID>P4GetChangelistInfo()<CR>
-  menu <silent> &Perforce.List\ &file\ names :echo <SID>P4GetFiles()<CR>
+    " menus
+    " (listed in order of shortcuts)
+    menu <silent> &Perforce.Plugin\ Help :echo <SID>PluginHelp()<CR>
+    menu <silent> &Perforce.&Add :echo <SID>P4Add()<CR>
+    menu <silent> &Perforce.&Branches\ for\ current\ user :echo <SID>P4Branches()<CR>
+    menu <silent> &Perforce.&Clients\ for\ current\ user :echo <SID>P4Clients()<CR>
+    menu <silent> &Perforce.&Delete :echo <SID>P4Delete()<CR>
+    menu <silent> &Perforce.&Edit :echo <SID>P4Edit()<CR>
+    menu <silent> &Perforce.&Fstat :echo <SID>P4Fstat()<CR>
+    menu <silent> &Perforce.Connection\ &Info :echo <SID>P4Info()<CR>
+    menu <silent> &Perforce.File&log :echo <SID>P4Filelog()<CR>
+    menu <silent> &Perforce.A&nnotate :echo <SID>P4Annotate()<CR>
+    menu <silent> &Perforce.&Opened\ files :echo <SID>P4Opened()<CR>
+    menu <silent> &Perforce.&Revert :echo <SID>P4Revert()<CR>
+    menu <silent> &Perforce.&Submit :echo <SID>P4Submit()<CR>
+    menu <silent> &Perforce.&Tag :echo <SID>P4Tag()<CR>
+    menu <silent> &Perforce.&Where :echo <SID>P4Where()<CR>
+    menu <silent> &Perforce.S&ync :echo <SID>P4Sync()<CR>
+    menu <silent> &Perforce.Run\ Command :echo <SID>P4Run()<CR>
+    menu <silent> &Perforce.File.Attribute\ set :echo <SID>P4Attribute()<CR>
+    menu <silent> &Perforce.File.Attribute\ list :echo <SID>P4Attributes()<CR>
+    menu <silent> &Perforce.File.Lock :echo <SID>P4Lock()<CR>
+    menu <silent> &Perforce.File.Unlock :echo <SID>P4Unlock()<CR>
+    menu <silent> &Perforce.Branching.Branch\ Info :echo <SID>P4Branch()<CR>
+    menu <silent> &Perforce.File.Changelist\ Info :echo <SID>P4Change()<CR>
+    menu <silent> &Perforce.File.Changelists\ For\ File :echo <SID>P4Changes()<CR>
+    menu <silent> &Perforce.Workspace.Workspace\ Info :echo <SID>P4Client()<CR>
+    menu <silent> &Perforce.File.Diff :echo <SID>P4Diff()<CR>
+    menu <silent> &Perforce.File.Diff2 :echo <SID>P4Diff2()<CR>
+    menu <silent> &Perforce.Jobs.Fix\ Job :echo <SID>P4Fix()<CR>
+    menu <silent> &Perforce.Jobs.Fixes\ for\ Job :echo <SID>P4Fixes()<CR>
+    menu <silent> &Perforce.Other.Grep :echo <SID>P4Grep()<CR>
+    menu <silent> &Perforce.User.Group\ Info :echo <SID>P4Group()<CR>
+    menu <silent> &Perforce.User.Group\ List :echo <SID>P4Groups()<CR>
+    menu <silent> &Perforce.Other.Help :echo <SID>P4Help()<CR>
+    menu <silent> &Perforce.Branching.Integrated :echo <SID>P4Integrated()<CR>
+    menu <silent> &Perforce.Branching.Rev\ Graph :echo <SID>P4RevGraph()<CR>
+    menu <silent> &Perforce.Jobs.Job\ Info :echo <SID>P4Job()<CR>
+    menu <silent> &Perforce.Jobs.Job\ List :echo <SID>P4Jobs()<CR>
+    menu <silent> &Perforce.Labels.Label\ Info :echo <SID>P4Label()<CR>
+    menu <silent> &Perforce.Labels.Label\ List :echo <SID>P4Labels()<CR>
+    menu <silent> &Perforce.File.Print :echo <SID>P4Print()<CR>
+    menu <silent> &Perforce.User.Protections\ Info :echo <SID>P4Protects()<CR>
+    menu <silent> &Perforce.File.Reopen\ to\ changelist :echo <SID>P4ReopenChange()<CR>
+    menu <silent> &Perforce.File.Reopen\ type :echo <SID>P4ReopenType()<CR>
+    menu <silent> &Perforce.File.Resolve\ automatically :echo <SID>P4Resolve()<CR>
+    menu <silent> &Perforce.File.Resolve\ status :echo <SID>P4Resolved()<CR>
+    menu <silent> &Perforce.Other.Set :echo <SID>P4Set()<CR>
+    menu <silent> &Perforce.File.Shelve :echo <SID>P4Shelve()<CR>
+    menu <silent> &Perforce.File.Remove\ from\ shelf :echo <SID>P4ShelveRemove()<CR>
+    menu <silent> &Perforce.File.Sizes :echo <SID>P4Sizes()<CR>
+    menu <silent> &Perforce.User.Tickets :echo <SID>P4Tickets()<CR>
+    menu <silent> &Perforce.File.Unshelve :echo <SID>P4Unshelve()<CR>
+    menu <silent> &Perforce.User.User\ Info :echo <SID>P4User()<CR>
+    menu <silent> &Perforce.User.User\ list :echo <SID>P4Users()<CR>
+    menu <silent> &Perforce.File.Verify :echo <SID>P4Verify()<CR>
+    menu <silent> &Perforce.Admin.Counters :echo <SID>P4Counters()<CR>
+    menu <silent> &Perforce.Admin.Database\ Schema :echo <SID>P4Dbschema()<CR>
+    menu <silent> &Perforce.Admin.Database\ Statistics :echo <SID>P4Dbstat()<CR>
+    menu <silent> &Perforce.Admin.Depots :echo <SID>P4Depots()<CR>
+    menu <silent> &Perforce.Admin.Jobspec :echo <SID>P4Jobspec()<CR>
+    menu <silent> &Perforce.Admin.License\ Info :echo <SID>P4License()<CR>
+    menu <silent> &Perforce.Admin.Database\ Lock\ Info :echo <SID>P4Lockstat()<CR>
+    menu <silent> &Perforce.Admin.Log\ Info :echo <SID>P4Logstat()<CR>
+    menu <silent> &Perforce.Admin.Log\ Tail :echo <SID>P4Logtail()<CR>
+    menu <silent> &Perforce.Admin.Monitor :echo <SID>P4Monitor()<CR>
+    menu <silent> &Perforce.Admin.Obliterate\ Preview :echo <SID>P4Obliterate()<CR>
+    menu <silent> &Perforce.Admin.Protections\ Table :echo <SID>P4Protect()<CR>
+    menu <silent> &Perforce.Admin.Trigger\ Table :echo <SID>P4Triggers()<CR>
+    menu <silent> &Perforce.Admin.Tunables :echo <SID>P4Tunables()<CR>
+    menu <silent> &Perforce.Admin.Typemap\ Table :echo <SID>P4Typemap()<CR>
 augroup END
 
-"----------------------------------------------------------------------------
-" Initialize variables
-"----------------------------------------------------------------------------
+"
+" initialize status variables
+"
 function s:P4InitialBufferVariables()
     let b:headrev=""
+    let b:headtype=""
     let b:depotfile=""
     let b:haverev=""
     let b:action=""
-    let b:otheropen=""
-    let b:otheraction=""
     let b:changelist=""
 endfunction
 
-if !exists( "p4ruler" )
-    let p4SetRuler = 1
+"
+" init ruler for status messages
+"
+if( strlen( &rulerformat ) == 0 ) && ( P4SetRuler == 1 )
+    set rulerformat=%60(%=%{P4RulerStatus()}\ %4l,%-3c\ %3p%%%)
 endif
 
-if( strlen( &rulerformat ) == 0 ) && ( p4SetRuler == 1 )
-  set rulerformat=%60(%=%{P4RulerStatus()}\ %4l,%-3c\ %3p%%%)
-endif
+"
+" filelog
+"
+function s:P4Filelog()
+python << EOF
+import vim, P4, types
+from datetime import datetime
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("filelog", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        m = out[0]
+        print m['depotFile']
+        print "{0:<5}{1:<10}{2:<15}{3:<20}{4:<12}description".format('rev','change','action','user','date') 
+    	for i in range(len(m['rev'])):
+            timeobj = datetime.fromtimestamp(float(m['time'][i]))
+            timestr = timeobj.strftime('%Y/%m/%d')
+            print "{0:<5}{1:<10}{2:<15}{3:<20}{4:<12}{5}".format(m['rev'][i],m['change'][i],m['action'][i],m['user'][i],timestr,m['desc'][i]) 
+    p4.disconnect()
 
-let s:PerforceExecutable="p4"
-
-"----------------------------------------------------------------------------
-" Minimal execution of a p4 command, followed by re-opening
-" of the file so that status changes are recognised. This is
-" mainly for use by Perforce command.
-"----------------------------------------------------------------------------
-function s:P4ShellCommandAndEditCurrentBuffer( sCmd )
-		 call s:P4ShellCommandCurrentBuffer( a:sCmd )
-		 e!
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
 endfunction
 
-"----------------------------------------------------------------------------
-" A wrapper around a p4 command line for the current buffer
-"----------------------------------------------------------------------------
-function s:P4ShellCommandCurrentBuffer( sCmd )
-                let filename = expand( "%:p" )
-                return s:P4ShellCommand( a:sCmd . " " . filename )
-endfunction
-
-"----------------------------------------------------------------------------
-" A wrapper around a p4 command line
-"----------------------------------------------------------------------------
-function s:P4ShellCommand( sCmd )
-    let sReturn = ""
-    let sCommandLine = s:PerforceExecutable . " " . a:sCmd
-    let v:errmsg = ""
-    let sReturn = system( sCommandLine )
-    if v:errmsg == ""
-        if match( sReturn, "Perforce password (P4PASSWD) invalid or unset\." ) != -1
-            let v:errmsg = "Not logged in to Perforce."
-        elseif v:shell_error != 0
-            let v:errmsg = sReturn
-        else
-            return sReturn
-        endif
-    endif
-endfunction
-
-"----------------------------------------------------------------------------
-" Return the p4 command line string
-"----------------------------------------------------------------------------
-function s:P4GetShellCommand( sCmd )
-    return s:PerforceExecutable . " " . a:sCmd
-endfunction
-
-"----------------------------------------------------------------------------
-" Revert a file, with more checking than just wrapping the command
-"----------------------------------------------------------------------------
-function s:P4RevertFile()
-    let action=confirm("p4 Revert this file and lose any changes?" ,"&Yes\n&No", 2, "Question")
-    if action == 1
-		 if s:P4Action() != ""
-            call s:P4ShellCommandCurrentBuffer( "revert" )
-		     if v:errmsg != ""
-		         echoerr "Unable to revert file. " . v:errmsg
-		         return
-		     else
-		         e!
-		 		 call s:P4RestoreLastPosition()
-		     endif
-		 endif
-      " No, abandon changes
-    elseif action == 2
-      " Cancel (or any other result), don't do the edit
-    endif
-endfunction
-
-"----------------------------------------------------------------------------
-" Diff a file, with more checking than just wrapping the command
-"----------------------------------------------------------------------------
-function s:P4DiffFile()
-    let diff = s:P4ShellCommandCurrentBuffer( "diff -db" )
-    return diff
-endfunction
-
-"----------------------------------------------------------------------------
-" Unified diff a file, with more checking than just wrapping the command
-"----------------------------------------------------------------------------
-function s:P4UDiffFile()
-    let diff = s:P4ShellCommandCurrentBuffer( "diff -du -db" )
-    return diff
-endfunction
-
-"----------------------------------------------------------------------------
-" Diff between different versions of a file
-"----------------------------------------------------------------------------
-function s:P4VDiffFile()
-    let s = inputdialog( "Version(s) to diff: ")
-    echo "\n"
-    if s != ""
-        let vers = split(s)
-        let i = 0
-        let files = ""
-        for v in vers
-            let files = files . ' ' . expand( "%:p" ) . '#' . v
-            let i = i + 1
-            if i == 2
-                break
-            endif
-        endfor
-        let cmd = ""
-
-        if i == 0
-            return ""
-        elseif i == 1
-            let cmd = "diff"
-        elseif i == 2
-            let cmd = "diff2"
-        endif
-        return s:P4ShellCommand(cmd . ' -db ' . files)
-    else
-        return ""
-    endif
-endfunction
-
-"----------------------------------------------------------------------------
-" List version history of the file.
-"----------------------------------------------------------------------------
-function s:P4VersionsFile()
-    let verinfo = s:P4ShellCommandCurrentBuffer( "filelog -l" )
-    if v:errmsg != ""
-        echoerr "Unable to get version info. " . v:errmsg
-        return ""
-    endif
-    let cllist = split(verinfo, "\n")
-    let l = ""
-    let gotchange = 0
-    let getcomment = 0
-    let cl = ""
-    for item in cllist[1:-1]
-        if match(item, '^\s*$') != -1
-            if gotchange == 1
-                let getcomment = 1
-                let gotchange = 0
-            elseif getcomment == 1
-                let l = l . ' ' . cl . "\n"
-                let cl = ""
-                let getcomment = 0
-            endif
-            continue
-        endif
-        if getcomment == 1
-            let cl = cl . ' ' . strpart(item, 1)
-        else
-            let fields = split(item)
-            if fields[2] == 'change'
-                let user = split(fields[8], "@")[0]
-                let cl = printf("%4.4s %6d %s %-12s", fields[1], fields[3], fields[6], user)
-                let gotchange = 1
-                let getcomment = 1
-            endif
-        endif
-    endfor
-    return l
-endfunction
-
-"----------------------------------------------------------------------------
-" Print the file.
-"----------------------------------------------------------------------------
-function s:P4PrintFile()
-    let versions = s:P4VersionsFile()
-    let ver = inputdialog(versions . "\n\n" . "Specify version to print", b:haverev)
-    if v:errmsg != "" || ver == ""
-        return ""
-    endif
-    let filename = expand( "%:p" ) . '#' . ver
-    return s:P4ShellCommand("print " . filename )
-    let p = s:P4ShellCommandCurrentBuffer( "print" )
-    return p
-endfunction
-
-"----------------------------------------------------------------------------
-" Sync a file, with more checking than just wrapping the command
-"----------------------------------------------------------------------------
-function s:P4SyncFile()
-    let action=confirm("p4 sync this file and lose any changes?" ,"&Yes\n&No", 2, "Question")
-    if action == 1
-		 if s:P4Action() == ""
-            call s:P4ShellCommandCurrentBuffer( "sync" )
-		     if v:errmsg != ""
-		         echoerr "Unable to sync file. " . v:errmsg
-		         return
-		     else
-		         e!
-		     endif
-		 else
-		    echoerr "File is already opened: cannot sync."
-		 endif
-      " No, abandon changes
-    elseif action == 2
-      " Cancel (or any other result), don't do the edit
-    endif
-"    "wincmd p
-endfunction
-
-"----------------------------------------------------------------------------
-" Open a file for editing, with more checking than just wrapping the command
-" This function prompts before opening -- it is used when a read-only file
-" is altered for the first time
-"----------------------------------------------------------------------------
-function s:P4OpenFileForEditWithPrompt()
-    let action=confirm("File is read only.  p4 Edit the file?" ,"&Yes\n&No", 1, "Question")
-    if action == 1
-         call s:P4OpenFileForEdit()
-    endif
-endfunction
-
-"----------------------------------------------------------------------------
-" Open a file for editing, with more checking than just wrapping the command
-"----------------------------------------------------------------------------
-function s:P4OpenFileForEdit()
-    if filewritable(expand( "%:p" ) ) == 0
-        if s:P4IsCurrent() != 0
-            let sync = confirm("You do not have the head revision.  p4 sync the file before opening?", "&Yes\n&No", 1, "Question")
-            if sync == 1
-                call s:P4ShellCommandCurrentBuffer( "sync" )
-            endif
-        endif
-    endif
-    if (b:headrev == "" || b:action == "add")
-        let action = "add"
-    else
-        let action = "edit"
-    endif
-    let listnum = ""
-    let listnum = s:P4GetChangelist( "Current changelists:\n" . s:P4GetChangelists(0) . "\nEnter changelist number: ", b:changelist )
-    if listnum == ""
-        echomsg "No changelist specified. Edit cancelled."
-        return
-    endif
-    call s:P4ShellCommandCurrentBuffer( action . " -c " . listnum )
-    if v:errmsg != ""
-        echoerr "Unable to open file for " action . ". " . v:errmsg
-        return
-    else
-        e!
-        call s:P4RestoreLastPosition()
-    endif
-endfunction
-
-"----------------------------------------------------------------------------
-" Print annotated version of file
-"----------------------------------------------------------------------------
-function s:P4AnnotateFile()
-    let p = s:P4ShellCommandCurrentBuffer( "annotate -q -db")
-    return p
-endfunction
-
-"----------------------------------------------------------------------------
-" Delete a file
-"----------------------------------------------------------------------------
-function s:P4OpenFileForDeletion()
-    let action=confirm("Mark file for deletion?" ,"&Yes\n&No", 2, "Question")
-    if action == 1
-        let listnum = ""
-        let listnum = s:P4GetChangelist( "Current changelists:\n" . s:P4GetChangelists(0) . "\nEnter changelist number: ", "" )
-        if listnum == ""
-            echomsg "No changelist specified. Delete cancelled."
-            return
-        endif
-        call s:P4ShellCommandCurrentBuffer( "delete -c " . listnum )
-        if v:errmsg != ""
-            echoerr "Unable to mark file for deletion. " . v:errmsg
-            return
-        else
-            e!
-            call s:P4RestoreLastPosition()
-        endif
-    else
-        echomsg "File is writable.  p4 Edit was not executed."
-    endif
-endfunction
-
-"----------------------------------------------------------------------------
+"
 " Produce string for ruler output
-"----------------------------------------------------------------------------
+"
 function P4RulerStatus()
-    if !exists( "b:headrev" )
+    if !exists( "b:headrev" ) 
         call s:P4InitialBufferVariables()
     endif
     if b:action == ""
         if b:headrev == ""
-            return "[Not in p4]"
-        elseif b:otheropen == ""
-            return "[p4 unopened]"
+            return "[Not in P4]" 
         else
-            return "[p4 " . b:otheraction . ":" . b:otheropen . "]"
+            return "[P4: " . b:haverev . "/" . b:headrev . " (" . b:headtype . ")]"
         endif
     else
-        return "[p4 " . b:action . b:changelist . "]"
+        return "[P4: " . b:action . " (". b:changelist . ")]"
     endif
 endfunction
 
-"----------------------------------------------------------------------------
-" Return file status information
-"----------------------------------------------------------------------------
-function s:P4GetFileStatus()
-    let filestatus = s:P4ShellCommandCurrentBuffer( "fstat" )
+"
+" fstat for ruler
+"
+function s:P4FstatVars()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("fstat", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        m = out[0]
+        change = ""
+        if 'change' in m:
+            change = m['change']
+        action = ""
+        if 'action' in m:
+            action = m['action']
+        headRev = ""
+        if 'headRev' in m:
+            headRev = m['headRev']
+        headType = ""
+        if 'headType' in m:
+            headType = m['headType']
+        haveRev = ""
+        if 'haveRev' in m:
+            haveRev = m['haveRev']
+        depotFile = ""
+        if 'depotFile' in m:
+            depotFile = m['depotFile']
+        vim.command("let b:headrev = \"%s\"" % headRev)
+        vim.command("let b:headtype = \"%s\"" % headType)
+        vim.command("let b:changelist = \"%s\"" % change)
+        vim.command("let b:depotfile = \"%s\"" % depotFile)
+        vim.command("let b:haverev = \"%s\"" % haveRev)
+        vim.command("let b:action = \"%s\"" % action)
+    p4.disconnect()
 
-    " \\C forces case-sensitive comparison
-    let b:headrev = matchstr( filestatus, "headRev [0-9]*\\C" )
-    let b:headrev = strpart( b:headrev, 8 )
-
-    let b:changelist = matchstr( filestatus, "change [0-9]*\\C" )
-    let b:changelist = strpart( b:changelist, 6 )
-
-    let b:depotfile = matchstr( filestatus, "depotFile [0-9a-zA-Z\/]*\\C" )
-    let b:depotfile = strpart( b:depotfile, 10 )
-
-    let b:haverev = matchstr( filestatus, "haveRev [0-9]*\\C" )
-    let b:haverev = strpart( b:haverev, 8 )
-
-    let b:action = matchstr( filestatus, "action [a-zA-Z]*\\C" )
-    let b:action = strpart( b:action, 7 )
-
-    let b:otheropen = matchstr( filestatus, "otherOpen0 [a-zA-Z]*\\C" )
-    let b:otheropen = strpart( b:otheropen, 11 )
-
-    let b:otheraction = matchstr( filestatus, "otherAction0 [a-zA-Z]*\\C" )
-    let b:otheraction = strpart( b:otheraction, 13 )
-
-    if b:headrev == ""
-        return "Not in p4"
-    else
-        return filestatus
-    endif
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
 endfunction
 
-"----------------------------------------------------------------------------
-" One of a set of functions that returns fields from the p4 fstat command
-"----------------------------------------------------------------------------
-function s:P4GetDepotFile()
-    let filestatus = s:P4GetFileStatus()
-    let depotfile = matchstr( filestatus, "depotFile [0-9a-zA-Z\/]*" )
-    let depotfile = strpart( depotfile, 10 )
-    echo depotfile
+"
+" fstat
+"
+function s:P4Fstat()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("fstat", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        m = out[0]
+        change = ""
+        if 'change' in m:
+            change = m['change']
+        action = ""
+        if 'action' in m:
+            action = m['action']
+        headRev = ""
+        if 'headRev' in m:
+            headRev = m['headRev']
+        headType = ""
+        if 'headType' in m:
+            headType = m['headType']
+        haveRev = ""
+        if 'haveRev' in m:
+            haveRev = m['haveRev']
+        depotFile = ""
+        if 'depotFile' in m:
+            depotFile = m['depotFile']
+        print "{0}: {1}/{2} ({3})".format(depotFile,haveRev,headRev,headType)
+        if change != "":
+            print "Opened in {0} ({1})".format(change,action)
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
 endfunction
 
-"----------------------------------------------------------------------------
-" One of a set of functions that returns fields from the p4 fstat command
-"----------------------------------------------------------------------------
-function s:P4GetHeadRev()
-    let filestatus = s:P4GetFileStatus()
-    let headrev = matchstr( filestatus, "headRev [0-9]*" )
-    let headrev = strpart( headrev, 8 )
-    return headrev
+"
+" open for edit
+"
+function s:P4Edit()
+python << EOF
+import vim, P4, types
+from datetime import datetime
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("edit", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s
+    p4.disconnect()
+    vim.command("edit")
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
 endfunction
 
-"----------------------------------------------------------------------------
-" One of a set of functions that returns fields from the p4 fstat command
-" haverev does not change without action from the client, so avoid executing
-" the p4 command if possible.
-"----------------------------------------------------------------------------
-function s:P4GetHaveRev()
-    if b:haverev != ""
-		 let haverev = b:haverev
-    else
-		 let filestatus = s:P4GetFileStatus()
-        let haverev = matchstr( filestatus, "haveRev [0-9]*" )
-        let haverev = strpart( haverev, 8 )
-    endif
-    return haverev
+"
+" revert
+"
+function s:P4Revert()
+python << EOF
+import vim, P4, types
+from datetime import datetime
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("revert", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s
+    p4.disconnect()
+    vim.command("edit")
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
 endfunction
 
-"----------------------------------------------------------------------------
-" One of a set of functions that returns fields from the p4 fstat command
-"----------------------------------------------------------------------------
-function s:P4IsCurrent()
-    let revdiff = s:P4GetHeadRev() - s:P4GetHaveRev()
-    if revdiff == 0
-    		 return 0
-    else
-    		 return -1
-    endif
+"
+" open for add
+"
+function s:P4Add()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("add", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s
+    p4.disconnect()
+    vim.command("edit")
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
 endfunction
 
-"----------------------------------------------------------------------------
-" One of a set of functions that returns fields from the p4 fstat command
-"----------------------------------------------------------------------------
-function s:P4Action()
-    let filestatus = s:P4GetFileStatus()
-    let action = matchstr( filestatus, "action [a-zA-Z]*\\C" )
-    let action = strpart( action, 7 )
-    return action
+"
+" open for delete
+"
+function s:P4Delete()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("delete", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s
+    p4.disconnect()
+    print "File opened for delete and removed from workspace - Vim buffer no longer valid"
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
 endfunction
 
-"----------------------------------------------------------------------------
-" Function to be called when loading vim as the p4 editor
-" ( on "p4 submit", "p4 client" and some others )
-"----------------------------------------------------------------------------
-function s:P4LaunchFromP4()
-    " search for description text, starting from the end of the file and
-    " wrapping
-    "
-    let submitdescription = "<enter description here>" 
-    let clientdescription = "^View:"
-    normal G$
-    let ret = search( submitdescription, "w" )
-    if ret != 0 " string found -- launched by p4 submit or p4 job
-	silent exec 'norm! C'
-	silent exec 'startinsert'
-    else
-        let retclient = search( clientdescription, "w" )
-	if retclient != 0 " string found -- launched by p4 client or p4 branch
-	    silent exec 'norm! j'
-	    silent exec 'norm! z.'
-	else
-	    silent exec 'norm! 1G'
-	endif
-    endif
+"
+" submit a single file
+"
+function s:P4Submit()
+    let desc = inputdialog( "Enter changelist description", "")
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("submit", "-d", vim.eval("desc"), vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s
+    p4.disconnect()
+    vim.command("edit")
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
 endfunction
 
-"----------------------------------------------------------------------------
-" Restore last position when re-opening a file 
-" after edit or revert or sync
-"----------------------------------------------------------------------------
-function s:P4RestoreLastPosition()
-    if line("'\"") > 0 && line("'\"") <= line("$") |
-		 exe "normal g`\"" |
-    endif
+"
+" sync to head
+"
+function s:P4Sync()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("sync", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s
+    p4.disconnect()
+    vim.command("edit")
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
 endfunction
 
-"----------------------------------------------------------------------------
-" Get info about a changelist
-"----------------------------------------------------------------------------
-function s:P4GetChangelistInfo()
-    let listnum = ""
-    let listnum = s:P4GetChangelist( "Current changelists:\n" . s:P4GetChangelists(1) . "\nEnter changelist number: ", b:changelist )
-    if listnum == ""
-        echomsg "No changelist specified. Cancelled."
-        return
-    endif
-    let l = s:P4ShellCommand("changelist -o " . listnum)
-    return l
+"
+" annotate
+"
+function s:P4Annotate()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("annotate", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
 endfunction
 
-"----------------------------------------------------------------------------
-" Get the current user's list of pending changelists
-" sAll: Show changelists for all clients. Otherwise, only the pending
-"   changelists in the current client is shown.
-"----------------------------------------------------------------------------
-function s:P4GetChangelists(sAll)
-    let opt = ''
-    if (a:sAll == 0)
-        let opt = ' -c ' . $P4CLIENT
-    endif
-    let cmd = "changes -L -s pending -u " . $USER . opt
-    let filestatus = s:P4ShellCommand(cmd)
-    if v:errmsg != ""
-        echoerr "Unable to get change lists. " . v:errmsg
-        return ''
-    endif
-    let cllist = split(filestatus, "\n")
-    let filestatus = ""
-    let item = ''
-    let info = ''
-    for item in cllist
-        if match(item, '^\s*$') != -1
-            continue
-        endif
-        if match(item, '^Change') != -1
-            if info != ''
-                let filestatus = filestatus . info . "\n"
-            endif
-            let info = matchstr(item, "[0-9][0-9]*")
-        else
-            let info = info . ' ' . substitute(item, '^\s*', '', '')
-        endif
-    endfor
-    if info != ''
-        let filestatus = filestatus . info . "\n"
-    endif
-    return filestatus
+"
+" list branches owned by current user
+"
+function s:P4Branches()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    info = p4.run("info")
+    username = info[0]['userName']
+    out = p4.run("branches", "-u", username)
+    if not (isinstance(out, types.NoneType)):
+        print "{0:<25}description".format('branch')
+        for m in out:
+            print "{0:<25}{1}".format(m['branch'],m['Description'])
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
 endfunction
 
-"----------------------------------------------------------------------------
-" Get a changelist
-"----------------------------------------------------------------------------
-function s:P4GetChangelist(sPrompt, sDefault)
-    let listnum = inputdialog( a:sPrompt, a:sDefault)
-    if listnum != ""
-        let b:changelist = listnum
-    endif
-    return listnum
+"
+" connection info
+"
+function s:P4Info()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("info")
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
 endfunction
 
-"----------------------------------------------------------------------------
-" Create a changelist
-"----------------------------------------------------------------------------
-function s:P4CreateChangelist()
-    let desc = ""
-    let desc = inputdialog( "New changelist description: ")
-    echo "\n"
-    if desc != ""
-        let cmd = s:P4GetShellCommand( "change -i" )
-        let result = system ( cmd, "Description: " . desc . "\nChange: new")
-        echo result
-    endif
+"
+" display branch mapping
+"
+function s:P4Branch()
+    let branch = inputdialog( "Enter branch name", "")
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("branch", "-o", vim.eval("branch")) 
+    if not (isinstance(out, types.NoneType)):
+        m = out[0]
+        print m['Branch']
+        print m['Description']
+        for s in m['View']:
+            print s
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
 endfunction
 
-"----------------------------------------------------------------------------
-" Return list of files for a changelist
-"----------------------------------------------------------------------------
-function s:P4GetFiles()
-    let listnum = ""
-    let listnum = s:P4GetChangelist( "Current changelists:\n" . s:P4GetChangelists(0) . "\nEnter changelist number: ", b:changelist )
-    if listnum == ""
-        echomsg "No changelist specified. Cancelled."
-        return
-    endif
-    let l = s:P4ShellCommand("opened -c " . listnum)
-    if v:errmsg != ""
-        echoerr "Unable to get list of files for changelist " .  listnum . ". "  . v:errmsg
-        return ""
-    endif
-    let cllist = split(l, "\n")
-    let l = ""
-    for item in cllist
-        let l = l . substitute(item, " change.*", "", "") . "\n"
-    endfor
-    return l
+"
+" display changelist info
+"
+function s:P4Change()
+    let change = inputdialog( "Enter changelist number", "")
+python << EOF
+import vim, P4, types
+from datetime import datetime
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("describe", "-s", vim.eval("change")) 
+    if not (isinstance(out, types.NoneType)):
+        m = out[0]
+        timeobj = datetime.fromtimestamp(float(m['time']))
+        timestr = timeobj.strftime('%Y/%m/%d')
+        print "Change {0} on {1} by {2} ({3})".format(m['change'],timestr,m['user'],m['status'])
+        print m['desc']
+        for i in range(len(m['depotFile'])):
+            print "{0:<15}{1}#{2}".format(m['action'][i],m['depotFile'][i],m['rev'][i])
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
 endfunction
 
-"----------------------------------------------------------------------------
-" Diff all files in current changelist
-"----------------------------------------------------------------------------
-function s:P4DiffFiles()
-    let files = s:P4GetFiles()
-    let cllist = split(files, "\n")
-    let diffout = ""
-    for item in cllist
-        let f = substitute(item, " -.*", "", "")
-        let diffout = diffout . "\n" . s:P4ShellCommand("diff -db " . f)
-    endfor
-    return diffout
+"
+" display changelists for current file
+"
+function s:P4Changes()
+python << EOF
+import vim, P4, types
+from datetime import datetime
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("changes", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        print "{0:<10}{1:<15}{2:<15}{3}".format('change','date','user','description')
+        for m in out:
+            timeobj = datetime.fromtimestamp(float(m['time']))
+            timestr = timeobj.strftime('%Y/%m/%d')
+            print "{0:<10}{1:<15}{2:<15}{3}".format(m['change'],timestr,m['user'],m['desc'])
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
 endfunction
 
-"----------------------------------------------------------------------------
-" Unified diff all files in current changelist
-"----------------------------------------------------------------------------
-function s:P4UDiffFiles()
-    let files = s:P4GetFiles()
-    let cllist = split(files, "\n")
-    let diffout = ""
-    for item in cllist
-        let f = substitute(item, " -.*", "", "")
-        let diffout = diffout . "\n" . s:P4ShellCommand("diff -du -db " . f)
-    endfor
-    return diffout
+"
+" display workspace data
+"
+function s:P4Client()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("client", "-o")
+    if not (isinstance(out, types.NoneType)):
+        m = out[0]
+        print "Client      : %s" % m['Client']
+        print "Root        : %s" % m['Root']
+        print "Options     : {0}, {1}".format(m['Options'],m['SubmitOptions'])
+        print "Line endings: %s" % m['LineEnd']
+        print m['Description']
+        for s in m['View']:
+            print s
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
 endfunction
 
-"----------------------------------------------------------------------------
-" Delete a changelist
-"----------------------------------------------------------------------------
-function s:P4DeleteChangelist()
-    let listnum = ""
-    let listnum = s:P4GetChangelist( "Current changelists:\n" . s:P4GetChangelists(0) . "\nEnter changelist number: ", "")
-    if listnum == ""
-        echomsg "No changelist specified. Delete cancelled."
-        return
-    endif
-    let action=confirm("Really p4 delete the changelist?" ,"&Yes\n&No", 1, "Question")
-    if action == 1
-        let result = s:P4ShellCommand("change -d " . listnum)
-        if v:errmsg != ""
-            echoerr "Unable to delete changelist " . listnum . ". " . v:errmsg
-            return
-        endif
-    endif
+"
+" list workspaces owned by current user
+"
+function s:P4Clients()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    info = p4.run("info")
+    username = info[0]['userName']
+    out = p4.run("clients", "-u", username)
+    if not (isinstance(out, types.NoneType)):
+        print "{0:<25}description".format('client')
+        for m in out:
+            print "{0:<25}{1}".format(m['client'],m['Description'])
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
 endfunction
 
-"----------------------------------------------------------------------------
-" Submit current changelist
-"----------------------------------------------------------------------------
-function s:P4SubmitChangelist()
-    let listnum = ""
-    let listnum = s:P4GetChangelist( "Current changelists:\n" . s:P4GetChangelists(0) . "\nEnter changelist number: ", b:changelist )
-    if listnum == ""
-        echomsg "No changelist specified. Submit cancelled."
-        return
-    endif
-    let action=confirm("Really checkin all the files?" ,"&Yes\n&No", 2, "Question")
-    if action == 1
-        let result = s:P4ShellCommand("submit -c " . listnum)
-        if v:errmsg != ""
-            echoerr "Unable to submit changelist " . listnum . ". " . v:errmsg
-            return
-         else
-             e!
-             call s:P4RestoreLastPosition()
-        endif
-    endif
+"
+" counters
+"
+function s:P4Counters()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("counters")
+    if not (isinstance(out, types.NoneType)):
+        print "{0:<20}{1:<20}".format("counter","value")
+        for m in out:
+            print "{0:<20}{1:<20}".format(m['counter'],m['value'])
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
 endfunction
 
-"----------------------------------------------------------------------------
-" Get general perforce info
-"----------------------------------------------------------------------------
-function s:P4GetInfo()
-    let foo = s:P4ShellCommand("info")
-    return foo
+"
+" database schema
+"
+function s:P4Dbschema()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("dbschema")
+    if not (isinstance(out, types.NoneType)):
+        print "{0:<20}{1:<20}".format("table","version")
+        for m in out:
+            print "{0:<20}{1:<20}".format(m['table'],m['version'])
+            print "{0:<5}{1:<20}{2:<15}{3:<15}{4:<15}".format('','name','type','dmtype','fmtkind')
+            for i in range(len(m['name'])):
+                print "{0:<5}{1:<20}{2:<15}{3:<15}{4:<15}".format('',m['name'][i],m['type'][i],m['dmtype'][i],m['fmtkind'][i])
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
 endfunction
 
-"----------------------------------------------------------------------------
-" Log in to perforce
-"----------------------------------------------------------------------------
-function s:P4Login()
-    " s:P4ShellCommand( "login" )
-    let cmd = "!" . s:PerforceExecutable . " login"
-    :exec cmd
+"
+" database stats
+"
+function s:P4Depots()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("depots")
+    if not (isinstance(out, types.NoneType)):
+        print "{0:<20}{1:<10}{2:<20}{3}".format("depot","type","map","description")
+        for m in out:
+            print "{0:<20}{1:<10}{2:<20}{3}".format(m['name'],m['type'],m['map'],m['desc'])
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
 endfunction
 
-"----------------------------------------------------------------------------
-" Display help
-"----------------------------------------------------------------------------
+"
+" depot list
+"
+function s:P4Dbstat()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("dbstat","-a")
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s.replace("\t","    ")
+    out = p4.run("dbstat","-s")
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" diff
+"
+function s:P4Diff()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("diff", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s.replace("\t","    ")
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" diff2
+"
+function s:P4Diff2()
+    let rev = inputdialog( "Enter revision to diff against head", "")
+python << EOF
+import vim, P4, types
+from datetime import datetime
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("diff2", vim.current.buffer.name + "#" + vim.eval("rev"), vim.current.buffer.name + "#head")
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s.replace("\t","    ")
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" fix job
+"
+function s:P4Fix()
+    let change = inputdialog( "Enter changelist number", "")
+    let job = inputdialog( "Enter job ID", "")
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("fix", "-c", vim.eval("change"), vim.eval("job"))
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s.replace("\t","    ")
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" fixes for job
+"
+function s:P4Fixes()
+    let job = inputdialog( "Enter job ID", "")
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("fixes", "-j", vim.eval("job"))
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s.replace("\t","    ")
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" where
+"
+function s:P4Where()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("where", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        m = out[0]
+        print "{0:<15}{1}".format("Depot path",m['depotFile'])
+        print "{0:<15}{1}".format("Client path",m['clientFile'])
+        print "{0:<15}{1}".format("Local path",m['path'])
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" command help
+"
 function s:P4Help()
-    return "Format: <Leader>letter, where letter is one of:\n" .
-    \ "\n" .
-    \ "h - Display this help message\n" .
-    \ "L - Login\n" .
-    \ "<Leader> - Perforce info\n" .
-    \ "\nCurrent File commands:\n" .
-    \ "e - Edit/add file to a changelist\n" .
-    \ "x - Mark file to changelist for deletion\n" .
-    \ "r - Revert file\n" .
-    \ "i - Get file info\n" .
-    \ "s - Get file info\n" .
-    \ "v - Show versions\n" .
-    \ "d - Diff file\n" .
-    \ "u - Unified diff file\n" .
-    \ "z - Diff specific versions of file\n" .
-    \ "p - Print depot file\n" .
-    \ "a - Print file annotated\n" .
-    \ "y - Sync file\n" .
-    \ "\nChangelist commands:\n" .
-    \ "C - Create a changelist\n" .
-    \ "D - Diff all files in a changelist\n" .
-    \ "U - Unified diff all files in a changelist\n" .
-    \ "X - Delete a changelist\n" .
-    \ "I - Print info about (current) changelist\n" .
-    \ "G - List changelists\n" .
-    \ "F - List files in (current) changelist\n" .
-    \ "S - Submit (current) changelist\n" .
-    \ ""
+    let topic = inputdialog( "Help on?", "")
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("help", vim.eval("topic"))
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s.replace("\t","    ")
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
 endfunction
+
+"
+" verify
+"
+function s:P4Verify()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("verify", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        print "{0:<5}{1:<15}{2:<10}{3:<12}{4:<15}{5}".format('rev','action','change','type','status','depot path')
+    	for m in out:
+            status = 'OK'
+            if 'status' in m:
+                status = m['status']
+            print "{0:<5}{1:<15}{2:<10}{3:<12}{4:<15}{5}".format(m['rev'],m['action'],m['change'],m['type'],status,m['depotFile'])
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" display user data
+"
+function s:P4User()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("user", "-o")
+    if not (isinstance(out, types.NoneType)):
+        m = out[0]
+        print "user        : %s" % m['User']
+        print "Email       : %s" % m['Email']
+        print "FullName    : {0}".format(m['FullName'])
+        if 'JobView' in m:
+            print "JobView     : {0}".format(m['JobView'])
+        if 'Reviews' in m:
+            print "Reviews     :"
+            for s in m['Reviews']:
+                print "    %s" % s
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" display user list
+"
+function s:P4Users()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("users")
+    if not (isinstance(out, types.NoneType)):
+        print "{0:<20}{1:<30}{2}".format('User','Email','Name')
+        for m in out:
+            print "{0:<20}{1:<30}{2}".format(m['User'],m['Email'],m['FullName'])
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" lock
+"
+function s:P4Lock()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("lock", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" unlock
+"
+function s:P4Unlock()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("unlock", vim.current.buffer.name)
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" print
+"
+function s:P4Print()
+    let rev = inputdialog( "Enter revision to print", "")
+python << EOF
+import vim, P4, types
+from datetime import datetime
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = False
+    out = p4.run("print", "-q", vim.current.buffer.name + "#" + vim.eval("rev"))
+    if not (isinstance(out, types.NoneType)):
+        for s in out:
+            print s.replace("\t","    ")
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" opened files
+"
+function s:P4Opened()
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("opened")
+    if not (isinstance(out, types.NoneType)):
+        print "{0:<40}{1:<10}{2:<12}{3:<10}".format('depotFile','rev','action','change')
+        for m in out:
+            print "{0:<40}{1:<10}{2:<12}{3:<10}".format(m['depotFile'],m['rev'],m['action'],m['change'])
+    p4.disconnect()
+
+except P4Exception:
+    for e in p4.errors:
+        print e
+    for w in p4.warnings:
+        print w
+EOF
+endfunction
+
+"
+" display group info
+"
+function s:P4Group()
+    let group = inputdialog( "Enter group name", "")
+python << EOF
+import vim, P4, types
+p4 = P4.P4()
+p4.prog = "VIM Integration"
+P4Exception = P4.P4Exception
+try:
+    p4.connect()
+    p4.tagged = True
+    out = p4.run("group", "-o", vim.eval("group")) 
+    if not (
